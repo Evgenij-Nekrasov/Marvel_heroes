@@ -1,83 +1,53 @@
-import { Component } from "react";
+import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 
-import MarvelService from "../../services/MarvelService";
+import useMarvelService from "../../services/MarvelService";
 import Spinner from "../spinner/Spinner";
 import ErrorMessage from "../errorMessage/ErrorMessage";
 import Skeleton from "../skeleton/Skeleton";
 
 import "./charInfo.scss";
 
-class CharInfo extends Component {
-   state = {
-      loading: false,
-      error: false,
-      selectedChar: null,
-   };
+const CharInfo = (props) => {
+   const [selectedChar, setSelectedChar] = useState(null);
 
-   marvelService = new MarvelService();
+   const { error, loading, getCharacter, clearError } = useMarvelService();
 
-   componentDidMount() {
-      this.updateChar();
-   }
+   useEffect(() => {
+      updateChar();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [props.charId]);
 
-   componentDidUpdate(prevProps) {
-      if (this.props.charId !== prevProps.charId) {
-         this.updateChar();
-      }
-   }
-   //Как это работает
-   updateChar = () => {
-      const { charId } = this.props;
+   const updateChar = () => {
+      const { charId } = props;
       if (!charId) {
          return;
       }
 
-      this.onCharLoading();
-
-      this.marvelService
-         .getCharacter(charId)
-         .then(this.onCharLoaded)
-         .catch(this.onError);
+      clearError();
+      getCharacter(charId).then(onCharLoaded);
    };
 
-   onCharLoading = () => {
-      this.setState({
-         loading: true,
-      });
+   const onCharLoaded = (selectedChar) => {
+      setSelectedChar(selectedChar);
    };
 
-   onCharLoaded = (selectedChar) => {
-      this.setState({ selectedChar, loading: false });
-   };
+   const skeleton = loading || error || selectedChar ? null : <Skeleton />;
+   const errorMessage = error ? <ErrorMessage /> : null;
+   const spinner = loading ? <Spinner /> : null;
+   const content = !(loading || error || !selectedChar) ? (
+      <View char={selectedChar} />
+   ) : null;
 
-   onError = () => {
-      this.setState({
-         loading: false,
-         error: true,
-      });
-   };
-   //Как работает 66-ая строчка?
-   render() {
-      const { loading, error, selectedChar } = this.state;
-
-      const skeleton = loading || error || selectedChar ? null : <Skeleton />;
-      const errorMessage = error ? <ErrorMessage /> : null;
-      const spinner = loading ? <Spinner /> : null;
-      const content = !(loading || error || !selectedChar) ? (
-         <View char={selectedChar} />
-      ) : null;
-
-      return (
-         <div className="char__info">
-            {skeleton}
-            {errorMessage}
-            {spinner}
-            {content}
-         </div>
-      );
-   }
-}
+   return (
+      <div className="char__info">
+         {skeleton}
+         {errorMessage}
+         {spinner}
+         {content}
+      </div>
+   );
+};
 
 const View = ({ char }) => {
    const { name, description, thumbnail, homepage, wiki, comics } = char;
@@ -113,14 +83,11 @@ const View = ({ char }) => {
                ? "There are no comics for this character"
                : null}
 
-            {comics.map((item, i) => {
-               return (
-                  //Как понимает, что {i} это char.id
-                  <li key={i} className="char__comics-item">
-                     {item.name}
-                  </li>
-               );
-            })}
+            {comics.map((item, i) => (
+               <li key={i} className="char__comics-item">
+                  {item.name}
+               </li>
+            ))}
          </ul>
       </>
    );

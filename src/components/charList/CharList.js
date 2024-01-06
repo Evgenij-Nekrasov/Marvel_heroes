@@ -1,83 +1,57 @@
-import React, { Component } from "react";
+import { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 
-import MarvelService from "../../services/MarvelService";
+import useMarvelService from "../../services/MarvelService";
 import Spinner from "../spinner/Spinner";
 import ErrorMessage from "../errorMessage/ErrorMessage";
 
 import "./charList.scss";
 
-class CharList extends Component {
-   state = {
-      chars: [],
-      loading: true,
-      error: false,
-      offset: 210,
-      newItemLoading: false,
-      charEnded: false,
+const CharList = (props) => {
+   const [chars, setChars] = useState([]);
+   const [offset, setOffset] = useState(210);
+   const [newItemLoading, setNewItemLoading] = useState(false);
+   const [charEnded, setCharEnded] = useState(false);
+
+   const { loading, error, getAllCharacters } = useMarvelService();
+
+   //Почему возникает бесконечный цикл без пустого массива
+   useEffect(() => {
+      onRequest(offset, true);
+   }, []);
+   //как это работает и зачем вообще нужна эта конструкция?Без неё все норм
+   const onRequest = (offset, initial) => {
+      initial ? setNewItemLoading(false) : setNewItemLoading(true);
+      getAllCharacters(offset).then(onCharsLoaded);
    };
 
-   marvelService = new MarvelService();
-
-   // Если изменить синтаксис, почему не работает как в компоненте RandomChar?
-   componentDidMount() {
-      this.onRequest();
-   }
-
-   //Зачем созданем переменную offset, если в marvelService она определена?
-   // Начинает работать 44 строка кода...?
-   onRequest = (offset) => {
-      this.onCharsLoading();
-      this.marvelService
-         .getAllCharacters(offset)
-         .then(this.onCharsLoaded)
-         .catch(this.onError);
-   };
-
-   onCharsLoading = () => {
-      this.setState({
-         newItemLoading: true,
-      });
-   };
-
-   onCharsLoaded = (newChars) => {
+   const onCharsLoaded = (newChars) => {
       let ended = false;
       if (newChars.length < 9) {
          ended = true;
       }
-
-      this.setState(({ offset, chars }) => ({
-         chars: [...chars, ...newChars],
-         loading: false,
-         newItemLoading: false,
-         offset: offset + 9,
-         charEnded: ended,
-      }));
+      //Как соблюдается последовательсность вызовов за счет колбэк функции ниже?
+      setChars((chars) => [...chars, ...newChars]);
+      setNewItemLoading((newItemLoading) => false);
+      setOffset((offset) => offset + 9);
+      setCharEnded((charEnded) => ended);
    };
 
-   onError = () => {
-      this.setState({
-         error: true,
-         loading: false,
-      });
-   };
+   const arrRefs = useRef([]);
 
-   arrRefs = [];
-
-   activClass = (ref) => {
-      this.arrRefs.push(ref);
-   };
-
-   focusOnItem = (i) => {
-      this.arrRefs.forEach((ref) =>
+   //Зачем сначала удаляем все char__item_selected
+   //Зачем current?
+   const focusOnItem = (id) => {
+      arrRefs.current.forEach((ref) =>
          ref.classList.remove("char__item_selected")
       );
-      this.arrRefs[i].classList.add("char__item_selected");
-      this.arrRefs[i].focus();
+      arrRefs.current[id].classList.add("char__item_selected");
+      arrRefs.current[id].focus();
    };
 
-   //Этот метод для оптимизации, чтобы не помещать такую конструкцию в render
-   renderItems(arr) {
+   const items = renderItems(chars);
+
+   function renderItems(arr) {
       const items = arr.map((item, i) => {
          let imgStyle = { objectFit: "cover" };
          if (
@@ -88,20 +62,19 @@ class CharList extends Component {
          }
 
          return (
-            //Мы можем брать текущее состояние пропсов из всего компонета или только из рендеринга?
             <li
                className="char__item"
                tabIndex={0}
-               ref={this.activClass}
+               ref={(el) => (arrRefs.current[i] = el)}
                key={item.id}
                onClick={() => {
-                  this.props.onCharSelected(item.id);
-                  this.focusOnItem(i);
+                  props.onCharSelected(item.id);
+                  focusOnItem(i);
                }}
                onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                     this.props.onCharSelected(item.id);
-                     this.focusOnItem(i);
+                     props.onCharSelected(item.id);
+                     focusOnItem(i);
                   }
                }}
             >
@@ -110,39 +83,28 @@ class CharList extends Component {
             </li>
          );
       });
-      // А эта конструкция вынесена для центровки спиннера/ошибки
       return <ul className="char__grid">{items}</ul>;
    }
 
-   render() {
-      const { chars, loading, error, offset, newItemLoading, charEnded } =
-         this.state;
-      //Почему этот метод в рендеринге, а не выше?
-      const items = this.renderItems(chars);
+   const errorMessage = error ? <ErrorMessage /> : null;
+   const spinner = loading && !newItemLoading ? <Spinner /> : null;
 
-      const errorMessage = error ? <ErrorMessage /> : null;
-      const spinner = loading ? <Spinner /> : null;
-      const content = !(loading || error) ? items : null;
-
-      //() => this.onRequest(offset) используем что метод самовызывался?
-      return (
-         <div className="char__list">
-            {errorMessage}
-            {spinner}
-            {content}
-
-            <button
-               className="button button__main button__long"
-               disabled={newItemLoading}
-               style={{ display: charEnded ? "none" : "block" }}
-               onClick={() => this.onRequest(offset)}
-            >
-               <div className="inner">load more</div>
-            </button>
-         </div>
-      );
-   }
-}
+   return (
+      <div className="char__list">
+         {errorMessage}
+         {spinner}
+         {items}
+         <button
+            className="button button__main button__long"
+            disabled={newItemLoading}
+            style={{ display: charEnded ? "none" : "block" }}
+            onClick={() => onRequest(offset)}
+         >
+            <div className="inner">load more</div>
+         </button>
+      </div>
+   );
+};
 
 CharList.propTypes = {
    onCharSelected: PropTypes.func.isRequired,
